@@ -1,0 +1,32 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Generated artifacts (large binaries — keep samples/ curated, not everything)
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.png
+*.jpg
+*.jpeg
+!samples/**
+
+# Python (in case scripts/ ends up Python)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node (in case tooling ends up Node)
+node_modules/
