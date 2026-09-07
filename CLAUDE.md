@@ -24,18 +24,20 @@ making architectural changes.
 |---|---|
 | `docs/` | Overview, architecture, infra runbook, grounding approach, open decisions |
 | `docs/adr/` | One file per decision made, numbered, with rejected alternatives |
-| `workflows/` | Exported n8n workflow JSON — **this is the source of truth**, not the n8n canvas |
+| `src/psychonecromancy/` | The pipeline itself — a Python package, no n8n (see ADR 0007) |
+| `runs/` | Gitignored per-run artifacts and `manifest.json` |
 | `comfy/` | Exported ComfyUI graphs, API format (requires dev mode enabled in ComfyUI to export) |
-| `prompts/` | Versioned system prompts for AI Agent nodes |
+| `prompts/` | Versioned system prompts for the grounding/scene-decomposition LLM calls |
 | `scripts/` | Health checks, ffmpeg helpers, export tooling |
 | `samples/` | Reference outputs, good and bad, for calibrating quality |
 | `BUILD_PLAN.md` | Phased plan with checkboxes — check status here before assuming what's built |
 
 ## Conventions
 
-- **The repo is the source of truth, not the n8n canvas.** If you change
-  something in the n8n UI, export it to `workflows/` and commit it. A
-  change that lives only in n8n is a change that will be lost.
+- **There is no n8n in this project anymore** (see ADR 0007 below). The
+  pipeline is a Python package in `src/psychonecromancy/`, running
+  natively on the GPU machine (Windows, no WSL). Don't reintroduce a
+  workflow-engine layer without a new ADR explaining why.
 - **Decisions get recorded as ADRs.** One file per decision in
   `docs/adr/`, numbered, dated, including rejected alternatives and why.
   Don't silently change an architectural decision — write a new ADR or
@@ -52,24 +54,41 @@ making architectural changes.
 
 ## Solved problems — do not re-litigate these
 
-### n8n → ComfyUI 403 Forbidden
+### n8n dropped entirely — orchestrator colocated with ComfyUI
+The prior architecture ran n8n on a separate VPS, reaching ComfyUI (on the
+GPU machine) over a Cloudflare Tunnel — which caused essentially all of
+this project's early infrastructure pain, including the 403 below. That
+whole topology is gone: the orchestrator is now a Python package running
+natively on the GPU machine (Windows, no WSL) alongside ComfyUI, reached at
+`127.0.0.1:8188`. No tunnel, no Cloudflare Access, no VPS in this
+project's infrastructure. See
+[ADR 0007](docs/adr/0007-cut-n8n-python-orchestrator-on-gpu-box.md). Do
+not propose reintroducing n8n or a remote orchestrator without a new ADR
+explaining what changed.
+
+The two items below are kept only as historical record of the diagnosis
+that led to that decision — they describe infrastructure that no longer
+exists for this project.
+
+<details>
+<summary>Historical: n8n → ComfyUI 403 Forbidden (moot — see above)</summary>
+
 ComfyUI rejects requests where `Origin` doesn't match `Host`, enforced on
 `POST`/`PUT`/`PATCH` but not `GET` — which is why the n8n credential test
-(a GET) passes while actual node execution (a POST) 403s. This is **not**
-a Cloudflare WAF or Bot Fight Mode issue; both were checked and ruled out
-already. Fix: start ComfyUI with `--enable-cors-header` (preferred), or
-align Origin/Host headers via a Cloudflare Transform Rule plus leaving the
-tunnel's Host Header override blank, or scope an Access Bypass policy to
-the VPS's actual egress IP (get it with `curl ifconfig.me` run from the
-VPS, not from Hostinger's panel). Full writeup:
-[docs/03-infrastructure.md](docs/03-infrastructure.md).
+(a GET) passed while actual node execution (a POST) 403'd. This was
+**not** a Cloudflare WAF or Bot Fight Mode issue; both were checked and
+ruled out. Full writeup: [docs/03-infrastructure.md](docs/03-infrastructure.md).
+</details>
 
-### Drop `n8n-nodes-comfyui`
-Use explicit HTTP Request nodes (`POST /prompt` → poll
-`GET /history/{id}` → `GET /view`) instead of the community node. The
-community node hides the polling loop and blocks custom headers, which
-blocks Cloudflare Access service tokens. See
-[ADR 0001](docs/adr/0001-drop-n8n-nodes-comfyui.md).
+<details>
+<summary>Historical: dropped <code>n8n-nodes-comfyui</code> (moot — see above)</summary>
+
+Was: use explicit HTTP Request nodes instead of the community node, since
+it hid the polling loop and blocked the custom headers Cloudflare Access
+required. See [ADR 0001](docs/adr/0001-drop-n8n-nodes-comfyui.md)
+(superseded). The underlying preference for explicit, debuggable calls
+carries forward into the `comfy.py` client.
+</details>
 
 ### No Midjourney syntax in ComfyUI prompts
 `--ar`, `--v`, etc. are not parsed by ComfyUI — they become literal tokens
@@ -79,10 +98,16 @@ the Empty Latent Image node's width/height. See
 
 ## Decisions already made (don't re-ask, revisit only if the user raises it)
 
+- Orchestration: no n8n. A Python package (`src/psychonecromancy/`)
+  running natively on the GPU machine (Windows, no WSL), colocated with
+  ComfyUI. ([ADR 0007](docs/adr/0007-cut-n8n-python-orchestrator-on-gpu-box.md),
+  supersedes [ADR 0001](docs/adr/0001-drop-n8n-nodes-comfyui.md))
 - Motion: image-to-video diffusion, not programmatic camera moves.
   ([ADR 0003](docs/adr/0003-motion-image-to-video-diffusion.md))
-- Assembly: local FFmpeg via Execute Command, not a hosted video API.
-  ([ADR 0004](docs/adr/0004-assembly-local-ffmpeg.md))
+- Assembly: local FFmpeg invoked as a direct subprocess from the
+  orchestrator, not a hosted video API and not an n8n Execute Command
+  node. ([ADR 0004](docs/adr/0004-assembly-local-ffmpeg.md), mechanism
+  superseded by [ADR 0007](docs/adr/0007-cut-n8n-python-orchestrator-on-gpu-box.md))
 - Narration: first-person voice. TTS vendor still unchosen.
 - Grounding: new project-specific research step, not a reuse of the
   existing pre-modern polity narrative pipeline.
@@ -96,9 +121,10 @@ the Empty Latent Image node's width/height. See
 
 ## Still genuinely open — see docs/05-open-decisions.md
 
-TTS vendor, publish target platform, durable output storage location, GPU
-dependency migration path. Don't pick one of these unilaterally in code
-without flagging it — surface the decision to the user first.
+TTS vendor, publish target platform, durable output storage location,
+future migration path off the single Windows GPU workstation. Don't pick
+one of these unilaterally in code without flagging it — surface the
+decision to the user first.
 
 ## Scope
 

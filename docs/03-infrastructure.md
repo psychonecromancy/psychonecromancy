@@ -4,95 +4,98 @@
 
 | Component | Where | Notes |
 |---|---|---|
-| n8n | Hostinger VPS, self-hosted, v1.123.5 | Orchestrator. Source of truth is the exported JSON in `workflows/`, not the n8n canvas. |
-| ComfyUI | Local machine, author's GPU | Listens on `0.0.0.0:8188`. Not always on. |
-| Cloudflare Tunnel | — | Exposes local ComfyUI at `https://comfy.psychonecromancy.com` to the VPS. |
-| Cloudflare Access | In front of the tunnel hostname | Zero Trust Access application. |
-| Domain | `psychonecromancy.com` | Cloudflare free plan. |
+| Orchestrator | GPU machine, Windows, native (no WSL) | Python package, `src/psychonecromancy/`. Runs the whole pipeline. |
+| ComfyUI | Same GPU machine | Listens on `127.0.0.1:8188`. Reached directly by the orchestrator — no tunnel. |
 | GitHub | `https://github.com/psychonecromancy` | This repo. |
 
-## Solved: n8n → ComfyUI returns 403
+**No longer part of this project's infrastructure:** the Hostinger VPS
+(n8n), the Cloudflare Tunnel, the Cloudflare Zero Trust Access application
+in front of it, and `psychonecromancy.com`'s DNS/WAF configuration. n8n was
+dropped in favor of a Python orchestrator colocated with ComfyUI — see
+[ADR 0007](adr/0007-cut-n8n-python-orchestrator-on-gpu-box.md). The VPS
+and n8n instance may still exist and run other, unrelated workflows; they
+just aren't this project's concern anymore. If a domain is needed later
+(e.g. for publishing or a status page), that's a separate, future decision
+— not assumed to be `psychonecromancy.com` on the prior Cloudflare setup.
 
-**Symptom:** n8n's HTTP request to ComfyUI (via the tunnel) returns
+## Historical — no longer applicable
+
+These are kept for the record per this repo's convention of not
+re-litigating solved problems, but they describe infrastructure that no
+longer exists for this project as of
+[ADR 0007](adr/0007-cut-n8n-python-orchestrator-on-gpu-box.md). Do not
+spend time re-verifying or re-fixing these unless the orchestrator moves
+off the GPU machine again in the future.
+
+### n8n → ComfyUI 403 Forbidden
+
+**Symptom:** n8n's HTTP request to ComfyUI (via the tunnel) returned
 `403 - "403: Forbidden"`. The n8n credential test against the same host
-succeeds (goes green), which is misleading.
+succeeded (went green), which was misleading.
 
-**Root cause:** ComfyUI is rejecting the request — this is not a Cloudflare
-WAF or Bot Fight Mode issue (both were investigated and are irrelevant; do
-not re-investigate them). By default, ComfyUI only accepts requests whose
-`Origin` header matches its `Host` header, and it enforces this on
-state-changing methods (`POST`/`PUT`/`PATCH`) but **not** on `GET`. That
-asymmetry is exactly why the credential test (a `GET`) goes green while the
-actual node execution (a `POST /prompt`) 403s.
+**Root cause:** ComfyUI was rejecting the request — not a Cloudflare WAF or
+Bot Fight Mode issue (both were investigated and ruled out). By default,
+ComfyUI only accepts requests whose `Origin` header matches its `Host`
+header, and it enforces this on state-changing methods
+(`POST`/`PUT`/`PATCH`) but not on `GET` — which is why the credential test
+(a `GET`) went green while actual node execution (a `POST /prompt`) 403'd.
 
-The check is disabled entirely when ComfyUI is started with
-`--enable-cors-header`.
+**Fix, had this topology been kept:**
+1. Start ComfyUI with `--enable-cors-header` (disables the origin check
+   entirely; the tunnel + Access remained the real perimeter).
+2. Or: a Cloudflare Transform Rule stripping the `Origin` header, plus
+   confirming the tunnel's public hostname config didn't override the HTTP
+   Host Header to `localhost:8188` (that field needed to stay blank).
+3. Or: an Access Bypass policy scoped to the VPS's actual egress IP
+   (`curl ifconfig.me` run from the VPS itself, not Hostinger's panel) as
+   a `/32`.
 
-**Fix, in order of preference:**
+This entire problem class is eliminated by ADR 0007: with the orchestrator
+and ComfyUI on the same machine, there is no tunnel, no cross-origin
+request, and no Access policy in the path.
 
-1. **Start ComfyUI with `--enable-cors-header`.**
-   ```
-   python main.py --listen --enable-cors-header
-   ```
-   Simplest fix. The real perimeter remains the tunnel plus Cloudflare
-   Access — this only removes an Origin/Host equality check that wasn't
-   providing meaningful security given the tunnel + Access setup.
+### Decided (superseded): no `n8n-nodes-comfyui` community node
 
-2. **Keep the origin check; make the headers agree instead.** Two things,
-   both required:
-   - A Cloudflare Transform Rule that strips the `Origin` header on the
-     way to ComfyUI. No `Origin` header means the comparison is skipped.
-   - Confirm the tunnel's public hostname configuration does **not**
-     override the HTTP Host Header to `localhost:8188`. That field must be
-     left blank so the original public hostname is forwarded as `Host`,
-     otherwise `Host` and (untouched) `Origin` will still disagree.
+Was: explicit HTTP Request nodes (`POST /prompt` → poll
+`GET /history/{prompt_id}` → `GET /view`) instead of the community node,
+because it hid the polling loop and blocked custom headers needed for
+Cloudflare Access service tokens. Moot now that n8n itself is gone — see
+[ADR 0001](adr/0001-drop-n8n-nodes-comfyui.md) (superseded) and
+[ADR 0007](adr/0007-cut-n8n-python-orchestrator-on-gpu-box.md). The
+underlying preference (explicit, debuggable calls over a wrapping
+abstraction) carries forward into `comfy.py`.
 
-3. **If Cloudflare Access stays in front and neither of the above is
-   used:** the VPS's *egress* IP needs a Bypass policy scoped to that
-   IP as a `/32`. Get the egress IP with `curl ifconfig.me` **run from the
-   VPS itself** — the IP shown in Hostinger's control panel is not
-   reliable for this and has caused wasted effort before. Do not confuse
-   this with a general Access bypass; scope it to the single IP.
+## Runbook
 
-This is recorded as solved so it is not rediscovered. Earlier
-troubleshooting on this issue spent time on WAF rules and Bot Fight Mode —
-both are not the cause and do not need to be revisited.
-
-**Status:** diagnosed, fix not yet applied to the running system. Applying
-one of the above (option 1 preferred) and proving a round-trip image
-generation from n8n through the tunnel is Phase 1 of
-[BUILD_PLAN.md](../BUILD_PLAN.md).
-
-## Decided: no `n8n-nodes-comfyui` community node
-
-Rejected in favor of explicit HTTP Request nodes (`POST /prompt` → poll
-`GET /history/{prompt_id}` → `GET /view`). The community node hides the
-polling loop and doesn't expose custom header control, which blocks
-Cloudflare Access service tokens from being attached to the request. More
-nodes in the n8n canvas, but every failure point is visible and
-debuggable. See [ADR 0001](adr/0001-drop-n8n-nodes-comfyui.md).
-
-## Runbook (partial — expand as the pipeline is built)
-
-### Checking ComfyUI is reachable from the VPS
+### Starting ComfyUI (Windows, native)
 ```
-curl -I https://comfy.psychonecromancy.com/system_stats
+python main.py --listen
 ```
-A `GET` succeeding here does not prove `POST` will work — see the 403
-writeup above.
+No `--enable-cors-header` needed — the orchestrator calls
+`127.0.0.1:8188` directly, so there's no cross-origin request to reject in
+the first place.
 
-### Getting the VPS's real egress IP (for Access bypass policies)
-Run from the VPS, not from Hostinger's panel:
+### Checking ComfyUI is reachable locally
 ```
-curl ifconfig.me
+curl http://127.0.0.1:8188/system_stats
 ```
+
+### ComfyUI's WebSocket API (for progress tracking)
+`ws://127.0.0.1:8188/ws?clientId=<client_id>` pushes execution progress and
+completion events for a queued prompt. See ComfyUI's
+`script_examples/websockets_api_example.py` for the reference
+client-side flow. This is what `comfy.py` is meant to use instead of
+polling `/history/{prompt_id}` on a timer — see
+[02-architecture.md](02-architecture.md).
 
 ## Open infrastructure questions
 
-- Where does durable output storage live (VPS disk, object storage,
-  elsewhere)? Not decided — see
-  [05-open-decisions.md](05-open-decisions.md).
-- The local-GPU-behind-a-tunnel setup is fine for development, fragile for
-  anything scheduled/unattended (machine sleep, home network outage, tunnel
-  drop). No migration path decided yet; see
-  [05-open-decisions.md](05-open-decisions.md).
+- Where does durable output storage live (the GPU machine's disk long
+  term, external drive, object storage, elsewhere)? Not decided.
+- The pipeline now depends on one Windows machine being on and awake for
+  any run — simpler than the tunnel setup, but still a single point of
+  failure for anything scheduled/unattended. No migration path off a
+  single workstation decided yet; see
+  [05-open-decisions.md](05-open-decisions.md). Not a v1 concern
+  (scheduling is out of scope for v1 per
+  [01-overview.md](01-overview.md)).

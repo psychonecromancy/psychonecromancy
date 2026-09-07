@@ -13,19 +13,24 @@ that gate later phases.
 - [x] `.env.example` and `.gitignore`, no secrets committed
 - [ ] Initial commit pushed
 
-## Phase 1 — Fix the 403, prove one image round-trip
+## Phase 1 — Local Python round-trip to ComfyUI
 
-- [ ] Apply the ComfyUI fix (`--enable-cors-header`, preferred — see
-      [docs/03-infrastructure.md](docs/03-infrastructure.md))
-- [ ] Rebuild the ComfyUI call in n8n as explicit HTTP Request nodes
-      (`POST /prompt` → poll `GET /history/{id}` → `GET /view`), per
-      [ADR 0001](docs/adr/0001-drop-n8n-nodes-comfyui.md)
-- [ ] Export the working ComfyUI graph in API format to `comfy/`
-- [ ] Export the working n8n workflow to `workflows/`
-- [ ] Prove one full round trip: n8n triggers → ComfyUI generates over the
-      tunnel → image comes back to n8n → saved as an artifact
-- [ ] Document the actual polling interval / timeout values used, once
-      chosen
+Per [ADR 0007](docs/adr/0007-cut-n8n-python-orchestrator-on-gpu-box.md):
+n8n and the tunnel are gone, so this phase is now "prove a local round
+trip," not "fix the 403."
+
+- [ ] Scaffold the `src/psychonecromancy/` package (`cli.py`, `comfy.py`,
+      `stages/`) on the GPU machine (Windows, native, no WSL)
+- [ ] Implement `comfy.py`: `POST /prompt`, WebSocket progress via
+      `/ws?clientId=...`, `GET /view` to retrieve the result
+- [ ] Author a minimal ComfyUI graph, export it in API format to `comfy/`
+- [ ] Prove one full local round trip: CLI invocation → ComfyUI generates
+      on `127.0.0.1:8188` → image saved under `runs/<run-id>/`
+- [ ] Implement the per-run `manifest.json` (stage status, input hash,
+      output path) described in
+      [docs/02-architecture.md](docs/02-architecture.md)
+- [ ] Document the actual ComfyUI startup command and any flags used in
+      [docs/03-infrastructure.md](docs/03-infrastructure.md)'s runbook
 
 ## Phase 2 — Grounding and scene decomposition
 
@@ -51,8 +56,10 @@ that gate later phases.
 
 ## Phase 4 — Assembly
 
-- [ ] Build the local FFmpeg assembly step (Execute Command node), per
-      [ADR 0004](docs/adr/0004-assembly-local-ffmpeg.md)
+- [ ] Build `assemble.py`: local FFmpeg invoked as a direct subprocess,
+      per [ADR 0007](docs/adr/0007-cut-n8n-python-orchestrator-on-gpu-box.md)
+      (supersedes the n8n Execute Command mechanism in
+      [ADR 0004](docs/adr/0004-assembly-local-ffmpeg.md))
 - [ ] Produce both output renders (9:16 and 16:9, ~5 min each) from the
       same underlying shots/narration/music
 - [ ] Add captions

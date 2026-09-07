@@ -1,7 +1,11 @@
 # ADR 0004: Assembly via local FFmpeg, not a hosted video API
 
 **Date:** 2026-09-07
-**Status:** Accepted
+**Status:** Superseded by [ADR 0007](0007-cut-n8n-python-orchestrator-on-gpu-box.md) —
+the conclusion (local FFmpeg, not a hosted API) still holds and carries
+forward into ADR 0007; only the invocation mechanism changed, from an n8n
+Execute Command node to a direct subprocess call from the Python
+orchestrator.
 
 ## Context
 

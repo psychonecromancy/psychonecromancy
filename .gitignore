@@ -22,11 +22,15 @@ Thumbs.db
 *.jpeg
 !samples/**
 
-# Python (in case scripts/ ends up Python)
+# Python
 __pycache__/
 *.pyc
+*.egg-info/
 .venv/
 venv/
 
 # Node (in case tooling ends up Node)
 node_modules/
+
+# Per-run pipeline artifacts (docs/02-architecture.md)
+runs/

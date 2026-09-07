@@ -1,7 +1,11 @@
 # ADR 0001: Drop `n8n-nodes-comfyui`, use explicit HTTP Request nodes
 
 **Date:** 2026-09-07
-**Status:** Accepted
+**Status:** Superseded by [ADR 0007](0007-cut-n8n-python-orchestrator-on-gpu-box.md) —
+n8n itself was dropped from this project, making the choice between n8n
+node styles moot. Kept for historical record of why explicit HTTP calls
+were preferred over a wrapping node, which remains true in spirit of the
+Python `comfy.py` client ADR 0007 describes.
 
 ## Context
 

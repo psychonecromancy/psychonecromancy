@@ -15,28 +15,33 @@ videos out, no human opens a video editor.
 
 ## Status
 
-Documentation and repo scaffolding only. No pipeline code has been written
-yet. See [BUILD_PLAN.md](BUILD_PLAN.md) for phasing and
+Documentation and repo scaffolding. No pipeline logic has shipped yet. See
+[BUILD_PLAN.md](BUILD_PLAN.md) for phasing and
 [docs/05-open-decisions.md](docs/05-open-decisions.md) for what's still
 undecided.
 
-Current blocker (diagnosed, not yet fixed in the running system): n8n's call
-to ComfyUI returns `403 - "403: Forbidden"`. Root cause and fix options are
-written up in [docs/03-infrastructure.md](docs/03-infrastructure.md).
+The pipeline is orchestrated by a Python package
+(`src/psychonecromancy/`), running natively on the GPU machine (Windows,
+no WSL) alongside ComfyUI — there is no n8n and no separate VPS/tunnel in
+this project's infrastructure. See
+[ADR 0007](docs/adr/0007-cut-n8n-python-orchestrator-on-gpu-box.md) for
+why an earlier n8n-on-a-VPS design was cut.
 
 ## How to run it
 
 Nothing is runnable end-to-end yet. Once Phase 1 lands, this section will
-describe how to trigger the n8n workflow and where output artifacts land.
+describe `psycho run "<society and period>"` and where output artifacts
+land under `runs/`.
 
 ## Repo map
 
 | Path | Contents |
 |---|---|
 | `docs/` | Design docs, architecture, infra runbook, ADRs |
-| `workflows/` | Exported n8n workflow JSON (source of truth, not the n8n UI) |
+| `src/psychonecromancy/` | The pipeline — CLI, ComfyUI client, per-stage modules |
+| `runs/` | Gitignored per-run artifacts and manifest |
 | `comfy/` | Exported ComfyUI graphs, API format |
-| `prompts/` | Versioned system prompts used by AI Agent nodes |
+| `prompts/` | Versioned system prompts for the grounding/scene-decomposition LLM calls |
 | `scripts/` | Health checks, ffmpeg helpers, export tooling |
 | `samples/` | Reference outputs — good and bad — for calibrating quality |
 

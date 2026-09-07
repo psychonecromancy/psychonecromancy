@@ -41,6 +41,24 @@ Phase 3.
 reuse/adapt the existing pre-modern polity narrative pipeline.
 See [04-grounding.md](04-grounding.md) for reasoning.
 
+### Orchestration and topology
+**Decision:** Drop n8n entirely. The pipeline is a Python package
+(`src/psychonecromancy/`) running natively on the GPU machine (Windows, no
+WSL) — the same machine that runs ComfyUI. No VPS, no tunnel, no Cloudflare
+Access in this project's infrastructure anymore.
+**Trade-off accepted:** Loses n8n's execution history UI (mitigated by a
+per-run manifest plus structured logs, but not fully replaced), built-in
+credential storage (replaced by `.env`), and built-in scheduler/webhook
+triggers (not needed for v1; addable later without reintroducing n8n).
+Gains: the entire Cloudflare Tunnel/Access/403 troubleshooting surface is
+eliminated rather than fixed, WebSocket-based ComfyUI progress instead of
+polling, and pipeline logic in reviewable Python instead of exported
+workflow JSON.
+See [ADR 0007](adr/0007-cut-n8n-python-orchestrator-on-gpu-box.md), which
+supersedes [ADR 0001](adr/0001-drop-n8n-nodes-comfyui.md) and
+[ADR 0004](adr/0004-assembly-local-ffmpeg.md) (mechanism only, not
+conclusion, for the latter).
+
 ### Target length and platform
 **Decision:** v1 produces **two renders per input, same content**: one
 vertical (9:16) and one horizontal (16:9), each approximately **5
@@ -75,19 +93,20 @@ settled before Phase 5.
 Narration style is decided (first-person); which TTS service or local
 model produces it is not.
 
-### GPU dependency
-The pipeline depends on a home machine, behind a Cloudflare Tunnel, being
-awake and reachable whenever a run needs image generation or
-image-to-video diffusion. This is acceptable for development but is a
-single point of failure for anything scheduled or unattended (the
-project's own longer-term goal, per the top-level project description).
-**Not decided:** at what point this needs to move to always-on GPU
-infrastructure (e.g. a rented GPU instance), and what that migration would
-require of the ComfyUI-calling code (mainly: does it stay HTTP-based
-against `/prompt`, `/history`, `/view`, in which case migration is mostly a
-hostname/auth change, or does switching providers require a different
-integration entirely). Revisit this once Phase 1 is proven and before any
-work on Phase 5/6 (scheduling, reliability) begins.
+### GPU dependency — future migration off a single workstation
+With orchestration and ComfyUI now colocated (see "Orchestration and
+topology" above), the pipeline depends on one Windows machine being on and
+awake for any run. This is simpler than the prior tunnel-based setup (no
+network path to fail) but is still a single point of failure for anything
+scheduled or unattended — the project's own longer-term goal, per the
+top-level project description.
+**Not decided:** at what point this needs to move to always-on/rented GPU
+infrastructure, and what that migration would require of `comfy.py`
+(mainly: does it stay HTTP+WebSocket against a `/prompt`, `/ws`, `/view`
+API — in which case migration is mostly a hostname/auth change — or does
+switching providers require a different integration entirely). Revisit
+this once Phase 1 is proven and before any work on Phase 5/6 (scheduling,
+reliability) begins.
 
 ### Durable output storage
 Where finished videos and intermediate artifacts actually live once
