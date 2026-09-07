@@ -19,16 +19,24 @@ Per [ADR 0007](docs/adr/0007-cut-n8n-python-orchestrator-on-gpu-box.md):
 n8n and the tunnel are gone, so this phase is now "prove a local round
 trip," not "fix the 403."
 
-- [ ] Scaffold the `src/psychonecromancy/` package (`cli.py`, `comfy.py`,
-      `stages/`) on the GPU machine (Windows, native, no WSL)
-- [ ] Implement `comfy.py`: `POST /prompt`, WebSocket progress via
-      `/ws?clientId=...`, `GET /view` to retrieve the result
-- [ ] Author a minimal ComfyUI graph, export it in API format to `comfy/`
-- [ ] Prove one full local round trip: CLI invocation → ComfyUI generates
-      on `127.0.0.1:8188` → image saved under `runs/<run-id>/`
-- [ ] Implement the per-run `manifest.json` (stage status, input hash,
+- [x] Scaffold the `src/psychonecromancy/` package (`cli.py`, `comfy.py`,
+      `manifest.py`, `stages/`)
+- [x] Implement `comfy.py`: `POST /prompt`, WebSocket progress via
+      `/ws?clientId=...`, `GET /history` + `GET /view` to retrieve the
+      result. Written to ComfyUI's documented API but **not yet run
+      against a live ComfyUI instance** — validate on the GPU machine
+      before trusting it.
+- [x] Implement the per-run `manifest.json` (stage status, input hash,
       output path) described in
-      [docs/02-architecture.md](docs/02-architecture.md)
+      [docs/02-architecture.md](docs/02-architecture.md). Unlike
+      `comfy.py`, this has no external dependency and has been exercised
+      directly (create/load/save round-trip, cache hit/miss on input
+      change, re-run on missing output, failure recording).
+- [ ] Author a minimal ComfyUI graph, export it in API format to `comfy/`
+- [ ] Prove one full local round trip on the actual GPU machine: CLI
+      invocation → ComfyUI generates on `127.0.0.1:8188` → image saved
+      under `runs/<run-id>/` — this is the step that validates `comfy.py`
+      for real
 - [ ] Document the actual ComfyUI startup command and any flags used in
       [docs/03-infrastructure.md](docs/03-infrastructure.md)'s runbook
 
